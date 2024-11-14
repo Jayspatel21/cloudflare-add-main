@@ -2,8 +2,8 @@ name: Terraform Cloud Apply with Retry
  
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '12 7 * * *'  # Scheduled run
+  schedule:
+    - cron: '12 7 * * *'  # Scheduled run
  
 jobs:
   terraform:
@@ -49,8 +49,8 @@ jobs:
                   }
                 }
               }
-            }' \
-https://app.terraform.io/api/v2/runs \
+            }' 
+            \https://app.terraform.io/api/v2/runs \
             --silent --show-error --fail --output response.json
       - name: Extract Run ID
         id: extract_run_id
