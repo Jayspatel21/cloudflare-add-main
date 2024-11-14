@@ -86,16 +86,20 @@ jobs:
           echo "Waiting for EC2 instance to be ready..."
           sleep 60  # Adjust as necessary
           
-      - name: Debug EC2 Instance IP
+      - name: Terraform Output Check
         run: |
-           echo "EC2 Public IP: ${{ steps.get_ec2_ip.outputs.ec2_ip }}"
-        
-      - name: Terraform Init
-        run: |
-          terraform init
+          terraform output instance_public_ip
         env:
           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
           TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+ 
+        
+      # - name: Terraform Init
+      #   run: |
+      #     terraform init
+      #   env:
+      #     TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+      #     TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
 
       - name: Get EC2 Instance IP
         id: get_ec2_ip
