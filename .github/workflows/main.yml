@@ -19,17 +19,17 @@ jobs:
         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
         id: upload
         with:
-          workspace: "${{ secrets.WORKSPACE_NAME }}"  # Update to your Terraform workspace name
+          workspace: "${{ secrets.TF_WORKSPACE }}"  # Update to your Terraform workspace name
           directory: "."  # Adjust the directory if necessary
         env:
-          TF_CLOUD_ORGANIZATION: "${{ secrets.ORG_NAME }}"  # Update to your Terraform Cloud organization
-          TF_API_TOKEN: "${{ secrets.TERRAFORM_API_TOKEN }}"
+          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"  # Update to your Terraform Cloud organization
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
 
       - name: Trigger Apply Run
         id: apply
         run: |
           curl \
-            --header "Authorization: Bearer ${{ secrets.TERRAFORM_API_TOKEN }}" \
+            --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
             --header "Content-Type: application/vnd.api+json" \
             --request POST \
             --data '{
@@ -61,7 +61,7 @@ jobs:
           max_attempts=3
           while [ $attempts -lt $max_attempts ]; do
             curl \
-              --header "Authorization: Bearer ${{ secrets.TERRAFORM_API_TOKEN }}" \
+              --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
               --header "Content-Type: application/vnd.api+json" \
               --request POST \
               --data '{
@@ -77,7 +77,7 @@ jobs:
             sleep 10
           done
         env:
-          TF_API_TOKEN: "${{ secrets.TERRAFORM_API_TOKEN }}"
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
           
       - name: Wait for Apply to Complete
         run: sleep 60  # Adjust as needed to wait until the server is up
