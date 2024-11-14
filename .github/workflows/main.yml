@@ -1,0 +1,107 @@
+name: Terraform Cloud Apply with Retry
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '12 7 * * *'  # Scheduled run
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Terraform Init
+        run: terraform init
+        env:
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+
+      - name: Upload Configuration
+        uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
+        id: upload
+        with:
+          workspace: "${{ secrets.TF_WORKSPACE }}"
+          directory: "."
+        env:
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+
+      - name: Trigger Apply Run
+        id: apply
+        run: |
+          curl \
+            --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request POST \
+            --data '{
+              "data": {
+                "type": "runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "${{ secrets.WORKSPACE_ID }}"
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs \
+            --silent --show-error --fail --output response.json
+
+      - name: Extract Run ID
+        id: extract_run_id
+        if: success()
+        run: |
+          if [ -f response.json ]; then
+            run_id=$(jq -r '.data.id' response.json)
+            echo "apply_run_id=$run_id" >> $GITHUB_OUTPUT
+            echo "Extracted Run ID: $run_id"
+          else
+            echo "Failed to retrieve run ID from response. Check API response for errors."
+            exit 1
+          fi
+
+      - name: Retry Approve Apply Plan if Failed
+        run: |
+          attempts=0
+          max_attempts=3
+          while [ $attempts -lt $max_attempts ]; do
+            curl \
+              --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data '{
+                "data": {
+                  "type": "runs",
+                  "attributes": {
+                    "status": "confirmed"
+                  }
+                }
+              }' \
+              https://app.terraform.io/api/v2/runs/${{ steps.extract_run_id.outputs.apply_run_id }}/actions/confirm && break
+            attempts=$((attempts+1))
+            echo "Retrying approval attempt $attempts of $max_attempts..."
+            sleep 10
+          done
+        env:
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+
+      - name: Wait for Apply to Complete
+        run: sleep 60  # Adjust as needed to wait until the server is up
+
+      - name: Upload Environment Files to Server
+        if: always()  # Run after server creation
+        run: |
+          scp -o StrictHostKeyChecking=no -i /path/to/private_key \
+            <<< "${{ secrets.FIREFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/firefly.env
+          scp -o StrictHostKeyChecking=no -i /path/to/private_key \
+            <<< "${{ secrets.DRAGONFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/dragonfly.env
+        env:
+          FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
+          DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
