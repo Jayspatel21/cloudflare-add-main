@@ -81,7 +81,7 @@ jobs:
                   }
                 }
               }' \
-https://app.terraform.io/api/v2/runs/${{ steps.extract_run_id.outputs.apply_run_id }}/actions/confirm && break
+              https://app.terraform.io/api/v2/runs/${{ steps.extract_run_id.outputs.apply_run_id }}/actions/confirm && break
             attempts=$((attempts+1))
             sleep 10
           done
