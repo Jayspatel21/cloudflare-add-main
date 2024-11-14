@@ -84,8 +84,12 @@ jobs:
       - name: Wait for EC2 to be ready
         run: |
           echo "Waiting for EC2 instance to be ready..."
-          sleep 120  # Adjust as necessary
-
+          sleep 60  # Adjust as necessary
+          
+      - name: Debug EC2 Instance IP
+        run: |
+           echo "EC2 Public IP: ${{ steps.get_ec2_ip.outputs.ec2_ip }}"
+        
       - name: Terraform Init
         run: |
           terraform init
