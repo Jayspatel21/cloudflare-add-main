@@ -86,6 +86,13 @@ jobs:
           echo "Waiting for EC2 instance to be ready..."
           sleep 120  # Adjust as necessary
 
+      - name: Terraform Init
+        run: |
+          terraform init
+        env:
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+
       - name: Get EC2 Instance IP
         id: get_ec2_ip
         run: |
