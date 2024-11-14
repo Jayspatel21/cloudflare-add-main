@@ -86,17 +86,24 @@ jobs:
           echo "Waiting for EC2 instance to be ready..."
           sleep 120  # Adjust as necessary
 
+      - name: Get EC2 Instance IP
+        id: get_ec2_ip
+        run: |
+          # Use Terraform to get the output of the EC2 public IP after apply
+          terraform output -json instance_public_ip > ip.json
+          instance_ip=$(jq -r '.value' ip.json)
+          echo "::set-output name=ec2_ip::$instance_ip"
+          echo "EC2 Public IP: $instance_ip"
+
       - name: Upload Environment Files to Server
-        if: always()  # Run after server creation
+        if: always()  # This step will run after the server creation
         run: |
           echo "Uploading Environment Files to Server"
           echo "${{ secrets.SSH_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key  # Secure the private key file
           echo "Uploading Environment Files to Server"
-          scp -o StrictHostKeyChecking=no -i /tmp/ssh_key \
-            <<< "${{ secrets.FIREFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/firefly.env
-          scp -o StrictHostKeyChecking=no -i /tmp/ssh_key \
-            <<< "${{ secrets.DRAGONFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/dragonfly.env
+          scp -o StrictHostKeyChecking=no -i /tmp/ssh_key /tmp/firefly.env ec2-user@${{ steps.get_ec2_ip.outputs.ec2_ip }}:/var/www/server/firefly.env
+          scp -o StrictHostKeyChecking=no -i /tmp/ssh_key /tmp/dragonfly.env ec2-user@${{ steps.get_ec2_ip.outputs.ec2_ip }}:/var/www/server/dragonfly.env
         env:
           FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
           DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
