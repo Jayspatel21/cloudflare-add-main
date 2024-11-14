@@ -79,16 +79,16 @@ jobs:
         env:
           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
           
-      - name: Wait for Apply to Complete
-        run: sleep 60  # Adjust as needed to wait until the server is up
+      # - name: Wait for Apply to Complete
+      #   run: sleep 60  # Adjust as needed to wait until the server is up
 
-      - name: Upload Environment Files to Server
-        if: always()  # Run after server creation
-        run: |
-          scp -o StrictHostKeyChecking=no -i /path/to/private_key \
-            <<< "${{ secrets.FIREFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/firefly.env
-          scp -o StrictHostKeyChecking=no -i /path/to/private_key \
-            <<< "${{ secrets.DRAGONFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/dragonfly.env
-        env:
-          FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
-          DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
+      # - name: Upload Environment Files to Server
+      #   if: always()  # Run after server creation
+      #   run: |
+      #     scp -o StrictHostKeyChecking=no -i /path/to/private_key \
+      #       <<< "${{ secrets.FIREFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/firefly.env
+      #     scp -o StrictHostKeyChecking=no -i /path/to/private_key \
+      #       <<< "${{ secrets.DRAGONFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/dragonfly.env
+      #   env:
+      #     FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
+      #     DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
