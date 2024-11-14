@@ -1,39 +1,34 @@
 name: Terraform Cloud Apply with Retry
- 
+
 on:
+  # schedule:
+  #   - cron: '15 6 * * *'  
   workflow_dispatch:
-  schedule:
-    - cron: '12 7 * * *'  # Scheduled run
- 
+
 jobs:
   terraform:
     runs-on: ubuntu-latest
- 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
- 
-      - name: Terraform Init
-        run: terraform init
-        env:
-          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
-          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+
       - name: Upload Configuration
         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
         id: upload
         with:
-          workspace: "${{ secrets.TF_WORKSPACE }}"
-          directory: "."
+          workspace: "${{ secrets.TF_WORKSPACE }}"  # Update to your Terraform workspace name
+          directory: "."  # Adjust the directory if necessary
         env:
+          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"  # Update to your Terraform Cloud organization
           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
-          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
- 
+
       - name: Trigger Apply Run
         id: apply
         run: |
-          curl \
+          response=$(curl \
             --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
             --header "Content-Type: application/vnd.api+json" \
             --request POST \
@@ -49,21 +44,19 @@ jobs:
                   }
                 }
               }
-            }' 
-            \https://app.terraform.io/api/v2/runs \
-            --silent --show-error --fail --output response.json
-      - name: Extract Run ID
+            }' \
+            https://app.terraform.io/api/v2/runs \
+            --silent --show-error --output response.json)
+          
+          echo "API Response: $response"
+          echo "Response saved in response.json"
+
+      - name: Extract run_id
         id: extract_run_id
-        if: success()
         run: |
-          if [ -f response.json ]; then
-            run_id=$(jq -r '.data.id' response.json)
-            echo "apply_run_id=$run_id" >> $GITHUB_OUTPUT
-            echo "Extracted Run ID: $run_id"
-          else
-            echo "Failed to retrieve run ID from response. Check API response for errors."
-            exit 1
-          fi
+          run_id=$(jq -r '.data.id' response.json)
+          echo "::set-output name=apply_run_id::$run_id"
+
       - name: Retry Approve Apply Plan if Failed
         run: |
           attempts=0
@@ -87,3 +80,20 @@ jobs:
           done
         env:
           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+          
+      - name: Wait for EC2 to be ready
+        run: |
+          echo "Waiting for EC2 instance to be ready..."
+          sleep 120  # Adjust as necessary
+
+      # - name: Upload Environment Files to Server
+      #   if: always()  # Run after server creation
+      #   run: |
+      #     echo "Uploading Environment Files to Server"
+      #     scp -o StrictHostKeyChecking=no -i /path/to/private_key \
+      #       <<< "${{ secrets.FIREFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/firefly.env
+      #     scp -o StrictHostKeyChecking=no -i /path/to/private_key \
+      #       <<< "${{ secrets.DRAGONFLY_ENV_CONTENT }}" ec2-user@your_server_ip:/var/www/server/dragonfly.env
+      #   env:
+      #     FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
+      #     DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
