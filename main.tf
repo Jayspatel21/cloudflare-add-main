@@ -119,15 +119,9 @@ terraform {
     }
   }
 }
-
 provider "aws" {
   region = "us-east-1"  # Specify your AWS region
 }
-
-# Define the variables for environment file contents and private key path
-
-
-# Create a security group (SG) for the EC2 instance
 resource "aws_security_group" "sg" {
   name        = "my_security_group"
   description = "Allow SSH and HTTP access"

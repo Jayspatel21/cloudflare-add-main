@@ -161,42 +161,112 @@
 #           echo "Files uploaded during Terraform apply are already created on the instance."
 #         if: always()  # Optional step that runs after Terraform apply, but typically this isn't needed if files are uploaded during `remote-exec`.
 
-name: Terraform Cloud Apply
+name: Terraform Cloud Apply with Retry
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '15 * * * *'  # Schedule to run every hour at minute 15
 
 jobs:
   terraform:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Terraform Setup
-        uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: "1.5.0"  # Use the appropriate Terraform version
+          fetch-depth: 1  # Ensure only the latest commit is checked out
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Create .env Files
         env:
-          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-          TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
-
-      - name: Terraform Apply
+          FIREFLY_ENV_CONTENT: ${{ secrets.FIREFLY_ENV_CONTENT }}
+          DRAGONFLY_ENV_CONTENT: ${{ secrets.DRAGONFLY_ENV_CONTENT }}
         run: |
-          terraform apply -auto-approve \
-            -var "firefly_env_content=${{ secrets.FIREFLY_ENV_CONTENT }}" \
-            -var "dragonfly_env_content=${{ secrets.DRAGONFLY_ENV_CONTENT }}" \
-            -var "ssh_key_private=${{ secrets.SSH_KEY }}"
+          echo "${FIREFLY_ENV_CONTENT}" > ./firefly.env
+          echo "${DRAGONFLY_ENV_CONTENT}" > ./dragonfly.env
+          echo "Created firefly.env and dragonfly.env with the provided contents."
+
+      - name: Create SSH Private Key File
         env:
-          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-          TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+          AWS_SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          echo "${AWS_SSH_PRIVATE_KEY}" > ./id_rsa
+          chmod 600 ./id_rsa  # Set appropriate permissions for the SSH key
+          echo "SSH private key file created with restricted permissions."
 
-      - name: Wait for EC2 instance to initialize
-        run: sleep 60  # Adjust wait time if needed
+      - name: Upload Configuration to Terraform Cloud
+        uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
+        id: upload
+        with:
+          workspace: "${{ secrets.TF_WORKSPACE }}"  # Your workspace name
+          directory: "."  # Root directory of your repository (adjust if needed)
+        env:
+          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"  # Your organization name
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"  # Terraform Cloud API token
 
-      - name: Output instance public IP
-        run: terraform output instance_public_ip
+      - name: Trigger Apply Run
+        id: apply
+        run: |
+          curl \
+            --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request POST \
+            --data '{
+              "data": {
+                "type": "runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "${{ secrets.WORKSPACE_ID }}"  # Workspace ID
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs \
+            --silent --show-error --fail --output response.json
+          echo "Terraform apply run triggered."
+
+      - name: Extract run_id
+        id: extract_run_id
+        if: success()
+        run: |
+          if [ -f response.json ]; then
+            run_id=$(jq -r '.data.id' response.json)
+            echo "apply_run_id=$run_id" >> $GITHUB_OUTPUT
+            echo "Extracted Run ID: $run_id"
+          else
+            echo "Failed to retrieve run ID from response. Check API response for errors."
+            exit 1
+          fi
+
+      - name: Retry Approve Apply Plan if Failed
+        run: |
+          attempts=0
+          max_attempts=3
+          while [ $attempts -lt $max_attempts ]; do
+            curl \
+              --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data '{
+                "data": {
+                  "type": "runs",
+                  "attributes": {
+                    "status": "confirmed"
+                  }
+                }
+              }' \
+              https://app.terraform.io/api/v2/runs/${{ steps.extract_run_id.outputs.apply_run_id }}/actions/confirm && break
+            attempts=$((attempts+1))
+            sleep 10  # Sleep before retrying
+          done
+        env:
+          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"  # Make sure the API token is set here as well
+
+      - name: Cleanup Sensitive Files
+        if: always()
+        run: |
+          rm -f ./firefly.env ./dragonfly.env ./id_rsa
+          echo "Sensitive files cleaned up after execution."
