@@ -110,7 +110,15 @@
 # output "instance_public_ip" {
 #   value = aws_instance.my_ec2_instance.public_ip
 # }
+terraform {
+  backend "remote" {
+    organization = "Testinggg1111"
 
+    workspaces {
+      name = "Jackk-11"
+    }
+  }
+}
 
 provider "aws" {
   region = "us-east-1"  # Specify your AWS region
@@ -181,3 +189,4 @@ resource "aws_instance" "my_ec2_instance" {
 output "instance_public_ip" {
   value = aws_instance.my_ec2_instance.public_ip
 }
+
