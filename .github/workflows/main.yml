@@ -159,14 +159,14 @@
 #       - name: Upload Environment Files to Server (if needed after apply)
 #         run: |
 #           echo "Files uploaded during Terraform apply are already created on the instance."
-#         if: always()  # Optional step that runs after Terraform apply, but typically this isn't needed if files are uploaded during `remote-exec`.
+        # if: always()  # Optional step that runs after Terraform apply, but typically this isn't needed if files are uploaded during `remote-exec`.
 
 name: Terraform Cloud Apply with Retry
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '15 * * * *'  # Schedule to run every hour at minute 15
+  # schedule:
+  #   - cron: '15 * * * *'  # Schedule to run every hour at minute 15
 
 jobs:
   terraform:
