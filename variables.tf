@@ -15,6 +15,21 @@ variable "key_name" {
   type        = string
 }
 
+variable "firefly_env_content" {
+  description = "Firefly environment content"
+  type        = string
+}
+
+variable "dragonfly_env_content" {
+  description = "Dragonfly environment content"
+  type        = string
+}
+
+variable "ssh_key_private" {
+  description = "Path to the SSH private key"
+  type        = string
+}
+
 # variable "firefly_env_path" {
 #   type = string
 # }

@@ -1,8 +1,132 @@
-name: Terraform Cloud Apply with Retry
+# name: Terraform Cloud Apply with Retry
+
+# on:
+#   # schedule:
+#   #   - cron: '15 6 * * *'  
+#   workflow_dispatch:
+
+# jobs:
+#   terraform:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+#         with:
+#           fetch-depth: 1
+
+#       - name: Upload Configuration
+#         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
+#         id: upload
+#         with:
+#           workspace: "${{ secrets.TF_WORKSPACE }}"  # Update to your Terraform workspace name
+#           directory: "."  # Adjust the directory if necessary
+#         env:
+#           TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"  # Update to your Terraform Cloud organization
+#           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+
+#       - name: Trigger Apply Run
+#         id: apply
+#         run: |
+#           response=$(curl \
+#             --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+#             --header "Content-Type: application/vnd.api+json" \
+#             --request POST \
+#             --data '{
+#               "data": {
+#                 "type": "runs",
+#                 "relationships": {
+#                   "workspace": {
+#                     "data": {
+#                       "type": "workspaces",
+#                       "id": "${{ secrets.WORKSPACE_ID }}"
+#                     }
+#                   }
+#                 }
+#               }
+#             }' \
+#             https://app.terraform.io/api/v2/runs \
+#             --silent --show-error --output response.json)
+          
+#           echo "API Response: $response"
+#           echo "Response saved in response.json"
+
+#       - name: Extract run_id
+#         id: extract_run_id
+#         run: |
+#           run_id=$(jq -r '.data.id' response.json)
+#           echo "::set-output name=apply_run_id::$run_id"
+
+#       - name: Retry Approve Apply Plan if Failed
+#         run: |
+#           attempts=0
+#           max_attempts=3
+#           while [ $attempts -lt $max_attempts ]; do
+#             curl \
+#               --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+#               --header "Content-Type: application/vnd.api+json" \
+#               --request POST \
+#               --data '{
+#                 "data": {
+#                   "type": "runs",
+#                   "attributes": {
+#                     "status": "confirmed"
+#                   }
+#                 }
+#               }' \
+#               https://app.terraform.io/api/v2/runs/${{ steps.extract_run_id.outputs.apply_run_id }}/actions/confirm && break
+#             attempts=$((attempts+1))
+#             sleep 10
+#           done
+#         env:
+#           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+          
+#       - name: Wait for EC2 to be ready
+#         run: |
+#           echo "Waiting for EC2 instance to be ready..."
+#           sleep 60  # Adjust as necessary
+          
+#       - name: Terraform Output Check
+#         run: |
+#           terraform output instance_public_ip
+#         env:
+#           TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+#           TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+ 
+        
+#       # - name: Terraform Init
+#       #   run: |
+#       #     terraform init
+#       #   env:
+#       #     TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+#       #     TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
+
+#       - name: Get EC2 Instance IP
+#         id: get_ec2_ip
+#         run: |
+#           # Use Terraform to get the output of the EC2 public IP after apply
+#           terraform output -json instance_public_ip > ip.json
+#           instance_ip=$(jq -r '.value' ip.json)
+#           echo "::set-output name=ec2_ip::$instance_ip"
+#           echo "EC2 Public IP: $instance_ip"
+
+#       - name: Upload Environment Files to Server
+#         if: always()  # This step will run after the server creation
+#         run: |
+#           echo "Uploading Environment Files to Server"
+#           echo "${{ secrets.SSH_KEY }}" > /tmp/ssh_key
+#           chmod 600 /tmp/ssh_key  # Secure the private key file
+#           echo "Uploading Environment Files to Server"
+#           scp -o StrictHostKeyChecking=no -i /tmp/ssh_key /tmp/firefly.env ec2-user@${{ steps.get_ec2_ip.outputs.ec2_ip }}:/var/www/server/firefly.env
+#           scp -o StrictHostKeyChecking=no -i /tmp/ssh_key /tmp/dragonfly.env ec2-user@${{ steps.get_ec2_ip.outputs.ec2_ip }}:/var/www/server/dragonfly.env
+#         env:
+#           FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
+#           DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
+
+
+name: Terraform Apply with Environment Files Upload
 
 on:
-  # schedule:
-  #   - cron: '15 6 * * *'  
   workflow_dispatch:
 
 jobs:
@@ -15,110 +139,24 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Upload Configuration
-        uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
-        id: upload
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
         with:
-          workspace: "${{ secrets.TF_WORKSPACE }}"  # Update to your Terraform workspace name
-          directory: "."  # Adjust the directory if necessary
+          terraform_version: 1.3.0  # Specify the Terraform version you want to use
+
+      - name: Terraform Init
+        run: terraform init
         env:
-          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"  # Update to your Terraform Cloud organization
-          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
-      - name: Trigger Apply Run
-        id: apply
-        run: |
-          response=$(curl \
-            --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
-            --header "Content-Type: application/vnd.api+json" \
-            --request POST \
-            --data '{
-              "data": {
-                "type": "runs",
-                "relationships": {
-                  "workspace": {
-                    "data": {
-                      "type": "workspaces",
-                      "id": "${{ secrets.WORKSPACE_ID }}"
-                    }
-                  }
-                }
-              }
-            }' \
-            https://app.terraform.io/api/v2/runs \
-            --silent --show-error --output response.json)
-          
-          echo "API Response: $response"
-          echo "Response saved in response.json"
-
-      - name: Extract run_id
-        id: extract_run_id
-        run: |
-          run_id=$(jq -r '.data.id' response.json)
-          echo "::set-output name=apply_run_id::$run_id"
-
-      - name: Retry Approve Apply Plan if Failed
-        run: |
-          attempts=0
-          max_attempts=3
-          while [ $attempts -lt $max_attempts ]; do
-            curl \
-              --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
-              --header "Content-Type: application/vnd.api+json" \
-              --request POST \
-              --data '{
-                "data": {
-                  "type": "runs",
-                  "attributes": {
-                    "status": "confirmed"
-                  }
-                }
-              }' \
-              https://app.terraform.io/api/v2/runs/${{ steps.extract_run_id.outputs.apply_run_id }}/actions/confirm && break
-            attempts=$((attempts+1))
-            sleep 10
-          done
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var "firefly_env_content=${{ secrets.FIREFLY_ENV_CONTENT }}" -var "dragonfly_env_content=${{ secrets.DRAGONFLY_ENV_CONTENT }}" -var "private_key_path=${{ secrets.SSH_KEY }}"
         env:
-          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
-          
-      - name: Wait for EC2 to be ready
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+      
+      - name: Upload Environment Files to Server (if needed after apply)
         run: |
-          echo "Waiting for EC2 instance to be ready..."
-          sleep 60  # Adjust as necessary
-          
-      - name: Terraform Output Check
-        run: |
-          terraform output instance_public_ip
-        env:
-          TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
-          TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
- 
-        
-      # - name: Terraform Init
-      #   run: |
-      #     terraform init
-      #   env:
-      #     TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
-      #     TF_CLOUD_ORGANIZATION: "${{ secrets.TF_CLOUD_ORGANIZATION }}"
-
-      - name: Get EC2 Instance IP
-        id: get_ec2_ip
-        run: |
-          # Use Terraform to get the output of the EC2 public IP after apply
-          terraform output -json instance_public_ip > ip.json
-          instance_ip=$(jq -r '.value' ip.json)
-          echo "::set-output name=ec2_ip::$instance_ip"
-          echo "EC2 Public IP: $instance_ip"
-
-      - name: Upload Environment Files to Server
-        if: always()  # This step will run after the server creation
-        run: |
-          echo "Uploading Environment Files to Server"
-          echo "${{ secrets.SSH_KEY }}" > /tmp/ssh_key
-          chmod 600 /tmp/ssh_key  # Secure the private key file
-          echo "Uploading Environment Files to Server"
-          scp -o StrictHostKeyChecking=no -i /tmp/ssh_key /tmp/firefly.env ec2-user@${{ steps.get_ec2_ip.outputs.ec2_ip }}:/var/www/server/firefly.env
-          scp -o StrictHostKeyChecking=no -i /tmp/ssh_key /tmp/dragonfly.env ec2-user@${{ steps.get_ec2_ip.outputs.ec2_ip }}:/var/www/server/dragonfly.env
-        env:
-          FIREFLY_ENV_CONTENT: "${{ secrets.FIREFLY_ENV_CONTENT }}"
-          DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
+          echo "Files uploaded during Terraform apply are already created on the instance."
+        if: always()  # Optional step that runs after Terraform apply, but typically this isn't needed if files are uploaded during `remote-exec`.
