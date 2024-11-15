@@ -124,7 +124,44 @@
 #           DRAGONFLY_ENV_CONTENT: "${{ secrets.DRAGONFLY_ENV_CONTENT }}"
 
 
-name: Terraform Apply with Environment Files Upload
+# name: Terraform Apply with Environment Files Upload
+
+# on:
+#   workflow_dispatch:
+
+# jobs:
+#   terraform:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+#         with:
+#           fetch-depth: 1
+
+#       - name: Set up Terraform
+#         uses: hashicorp/setup-terraform@v2
+#         with:
+#           terraform_version: 1.3.0  # Specify the Terraform version you want to use
+
+#       - name: Terraform Init
+#         run: terraform init
+#         env:
+#           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+#           TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+
+#       - name: Terraform Apply
+#         run: terraform apply -auto-approve -var "firefly_env_content=${{ secrets.FIREFLY_ENV_CONTENT }}" -var "dragonfly_env_content=${{ secrets.DRAGONFLY_ENV_CONTENT }}" -var "private_key_path=${{ secrets.SSH_KEY }}"
+#         env:
+#           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+#           TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+      
+#       - name: Upload Environment Files to Server (if needed after apply)
+#         run: |
+#           echo "Files uploaded during Terraform apply are already created on the instance."
+#         if: always()  # Optional step that runs after Terraform apply, but typically this isn't needed if files are uploaded during `remote-exec`.
+
+name: Terraform Cloud Apply
 
 on:
   workflow_dispatch:
@@ -136,13 +173,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
 
-      - name: Set up Terraform
+      - name: Terraform Setup
         uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.3.0  # Specify the Terraform version you want to use
+          terraform_version: "1.5.0"  # Use the appropriate Terraform version
 
       - name: Terraform Init
         run: terraform init
@@ -151,12 +186,17 @@ jobs:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -var "firefly_env_content=${{ secrets.FIREFLY_ENV_CONTENT }}" -var "dragonfly_env_content=${{ secrets.DRAGONFLY_ENV_CONTENT }}" -var "private_key_path=${{ secrets.SSH_KEY }}"
+        run: |
+          terraform apply -auto-approve \
+            -var "firefly_env_content=${{ secrets.FIREFLY_ENV_CONTENT }}" \
+            -var "dragonfly_env_content=${{ secrets.DRAGONFLY_ENV_CONTENT }}" \
+            -var "ssh_key_private=${{ secrets.SSH_KEY }}"
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
           TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
-      
-      - name: Upload Environment Files to Server (if needed after apply)
-        run: |
-          echo "Files uploaded during Terraform apply are already created on the instance."
-        if: always()  # Optional step that runs after Terraform apply, but typically this isn't needed if files are uploaded during `remote-exec`.
+
+      - name: Wait for EC2 instance to initialize
+        run: sleep 60  # Adjust wait time if needed
+
+      - name: Output instance public IP
+        run: terraform output instance_public_ip
